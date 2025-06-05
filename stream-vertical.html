@@ -3,94 +3,126 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>iMoon Stream • Vertical</title>
+  <title>iMoon • Admin</title>
+  <!-- Tailwind (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS (for Vercel OAuth only) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.43.1/dist/umd/supabase.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.js"></script>
-  <style>
-    html,body,#root{margin:0;width:100%;height:100%;overflow:hidden}
-    canvas{display:block}
-    #hud{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);font-family:monospace;font-size:16px}
-  </style>
+  <style>html{color-scheme:dark light}</style>
 </head>
-<body class="bg-black">
-  <canvas id="c"></canvas>
-  <div id="hud" class="text-lime-400/80"></div>
+<body class="min-h-screen flex flex-col items-center justify-center bg-neutral-900 text-neutral-100 p-4">
+  <div id="app" class="w-full max-w-lg">
+    <!-- LOGIN UI -->
+    <div id="login" class="text-center space-y-6 hidden">
+      <h1 class="text-2xl font-semibold tracking-wide">iMoon Admin</h1>
+      <p class="opacity-80">Sign in with your Vercel account to manage stream settings.</p>
+      <button id="btn-login" class="px-6 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 transition">Login with Vercel</button>
+    </div>
+
+    <!-- MAIN PANEL -->
+    <form id="panel" class="space-y-6 hidden">
+      <h2 class="text-xl font-medium">Stream Configuration</h2>
+
+      <!-- Background -->
+      <label class="block">
+        <span class="block mb-1">Background preset</span>
+        <select name="bg" class="w-full rounded-md bg-neutral-800 p-2">
+          <option value="cosmic">Cosmic</option>
+          <option value="stars">Stars</option>
+          <option value="waves">Waves</option>
+          <option value="aurora">Aurora</option>
+        </select>
+      </label>
+
+      <!-- Hue -->
+      <label class="block">
+        <span class="block mb-1">Accent Hue</span>
+        <input type="color" name="hue" value="#9333ff" class="w-full h-10 rounded-md bg-neutral-800" />
+      </label>
+
+      <!-- Oscillator -->
+      <label class="block">
+        <span class="block mb-1">Oscillator Type</span>
+        <select name="osc" class="w-full rounded-md bg-neutral-800 p-2">
+          <option>sine</option>
+          <option>triangle</option>
+          <option>square</option>
+          <option>sawtooth</option>
+        </select>
+      </label>
+
+      <!-- BPM -->
+      <label class="block">
+        <span class="block mb-1">BPM (breathing cadence)</span>
+        <input type="number" name="bpm" min="20" max="120" step="1" value="40" class="w-full rounded-md bg-neutral-800 p-2" />
+      </label>
+
+      <!-- Star Density -->
+      <label class="block">
+        <span class="block mb-1">Star density (per 1 000 px)</span>
+        <input type="number" name="star_density" step="0.0001" value="0.0011" class="w-full rounded-md bg-neutral-800 p-2" />
+      </label>
+
+      <!-- Actions -->
+      <div class="flex gap-4">
+        <button type="submit" class="flex-1 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 transition">Save</button>
+        <button id="signout" type="button" class="flex-1 py-2 rounded-xl bg-neutral-700 hover:bg-neutral-600 transition">Log out</button>
+      </div>
+      <p id="status" class="text-sm opacity-70"></p>
+    </form>
+  </div>
 
   <script>
-    // ---- config fetch (same as landscape) ----
-    const SUPA_URL  = "${SUPABASE_URL}";
-    const SUPA_ANON = "${SUPABASE_ANON_KEY}";
-    const TABLE     = "stream_cfg";
+    /* ========= ENV ========= */
+    const SUPABASE_URL  = "${SUPABASE_URL}";
+    const SUPABASE_ANON = "${SUPABASE_ANON_KEY}";
 
-    const cfgParam = new URLSearchParams(location.search).get('cfg');
-    let cfg = cfgParam ? JSON.parse(cfgParam) : null;
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth:{flowType:'pkce'} });
+    const loginUI = document.getElementById('login');
+    const panelUI = document.getElementById('panel');
+    const statusEl = document.getElementById('status');
 
-    async function getCfg(){
-      if(cfg) return cfg;
-      const sb = supabase.createClient(SUPA_URL, SUPA_ANON);
-      const { data } = await sb.from(TABLE).select('*').limit(1).single();
-      cfg = data || { bg:'stars', hue:'#4ade80', osc:'sine', bpm:40 };
-      return cfg;
+    async function refresh(){
+      const { data:{ session } } = await sb.auth.getSession();
+      if(session){ loginUI.classList.add('hidden'); panelUI.classList.remove('hidden'); loadForm(); }
+      else { panelUI.classList.add('hidden'); loginUI.classList.remove('hidden'); }
     }
 
-    // ---- canvas setup ----
-    const canvas = document.getElementById('c');
-    const ctx = canvas.getContext('2d');
+    document.getElementById('btn-login').addEventListener('click',()=>{
+      sb.auth.signInWithOAuth({ provider:'vercel', options:{ redirectTo:location.href } });
+    });
+    document.getElementById('signout').addEventListener('click', async ()=>{ await sb.auth.signOut(); refresh(); });
 
-    function resize(){
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    window.addEventListener('resize', resize);
-    resize();
-
-    // ---- simple starfield animation tuned for portrait ----
-    const stars = Array.from({length:500}).map(()=>({
-      x: Math.random(),
-      y: Math.random(),
-      r: Math.random()*2+0.4,
-      s: Math.random()*0.7+0.2
-    }));
-
-    let start;
-    function draw(ts){
-      if(!start) start = ts;
-      const t = (ts-start)/1000;
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-      stars.forEach(s => {
-        const tw = (Math.sin(t*0.6 + s.s*8)+1)/2;
-        ctx.beginPath();
-        ctx.arc(s.x*canvas.width, s.y*canvas.height, s.r*tw, 0, Math.PI*2);
-        ctx.fillStyle = '#fff';
-        ctx.fill();
-      });
-      requestAnimationFrame(draw);
+    /* ===== Load & Save ===== */
+    async function loadForm(){
+      statusEl.textContent = 'Loading…';
+      const res = await fetch('/api/config');
+      if(!res.ok){ statusEl.textContent='Error loading'; return; }
+      const d = await res.json();
+      panelUI.bg.value           = d.bg            ?? 'cosmic';
+      panelUI.hue.value          = d.hue           ?? '#9333ff';
+      panelUI.osc.value          = d.osc           ?? 'sine';
+      panelUI.bpm.value          = d.bpm           ?? 40;
+      panelUI.star_density.value = d.star_density ?? 0.0011;
+      statusEl.textContent='';
     }
 
-    // ---- HUD (next full moon) ----
-    const hud = document.getElementById('hud');
-    function nextFullMoon(now=new Date()){
-      const synodic = 29.53059*86400*1000;
-      const phase = SunCalc.getMoonIllumination(now).phase;
-      const diff = (phase>0.5?1.5-phase:0.5-phase)*synodic;
-      return new Date(now.getTime()+diff);
-    }
-    function hudLoop(){
-      const now = new Date();
-      const full = nextFullMoon(now);
-      const sec = Math.floor((full-now)/1000);
-      const d = Math.floor(sec/86400), h = Math.floor(sec%86400/3600), m = Math.floor(sec%3600/60);
-      hud.textContent = `Full moon in ${d}d ${h}h ${m}m`;
-      requestAnimationFrame(hudLoop);
-    }
+    panelUI.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      statusEl.textContent='Saving…';
+      const payload = {
+        bg: panelUI.bg.value,
+        hue: panelUI.hue.value,
+        osc: panelUI.osc.value,
+        bpm: Number(panelUI.bpm.value),
+        star_density: Number(panelUI.star_density.value)
+      };
+      const res = await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+      statusEl.textContent = res.ok ? 'Saved ✓' : 'Save failed';
+    });
 
-    (async()=>{
-      await getCfg();
-      requestAnimationFrame(draw);
-      hudLoop();
-    })();
+    sb.auth.onAuthStateChange(()=>refresh());
+    refresh();
   </script>
 </body>
 </html>

@@ -4,21 +4,26 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>iMoon • Admin</title>
+  <!-- Tailwind (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS (for Vercel OAuth only) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.43.1/dist/umd/supabase.min.js"></script>
   <style>html{color-scheme:dark light}</style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-center bg-neutral-900 text-neutral-100 p-4">
   <div id="app" class="w-full max-w-lg">
+    <!-- LOGIN UI -->
     <div id="login" class="text-center space-y-6 hidden">
-      <h1 class="text-2xl font-semibold">iMoon Admin</h1>
+      <h1 class="text-2xl font-semibold tracking-wide">iMoon Admin</h1>
       <p class="opacity-80">Sign in with your Vercel account to manage stream settings.</p>
       <button id="btn-login" class="px-6 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 transition">Login with Vercel</button>
     </div>
 
+    <!-- MAIN PANEL -->
     <form id="panel" class="space-y-6 hidden">
       <h2 class="text-xl font-medium">Stream Configuration</h2>
 
+      <!-- Background -->
       <label class="block">
         <span class="block mb-1">Background preset</span>
         <select name="bg" class="w-full rounded-md bg-neutral-800 p-2">
@@ -29,11 +34,13 @@
         </select>
       </label>
 
+      <!-- Hue -->
       <label class="block">
         <span class="block mb-1">Accent Hue</span>
-        <input type="color" name="hue" class="w-full h-10 rounded-md bg-neutral-800" value="#4ade80" />
+        <input type="color" name="hue" value="#9333ff" class="w-full h-10 rounded-md bg-neutral-800" />
       </label>
 
+      <!-- Oscillator -->
       <label class="block">
         <span class="block mb-1">Oscillator Type</span>
         <select name="osc" class="w-full rounded-md bg-neutral-800 p-2">
@@ -44,11 +51,19 @@
         </select>
       </label>
 
+      <!-- BPM -->
       <label class="block">
         <span class="block mb-1">BPM (breathing cadence)</span>
         <input type="number" name="bpm" min="20" max="120" step="1" value="40" class="w-full rounded-md bg-neutral-800 p-2" />
       </label>
 
+      <!-- Star Density -->
+      <label class="block">
+        <span class="block mb-1">Star density (per 1 000 px)</span>
+        <input type="number" name="star_density" step="0.0001" value="0.0011" class="w-full rounded-md bg-neutral-800 p-2" />
+      </label>
+
+      <!-- Actions -->
       <div class="flex gap-4">
         <button type="submit" class="flex-1 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 transition">Save</button>
         <button id="signout" type="button" class="flex-1 py-2 rounded-xl bg-neutral-700 hover:bg-neutral-600 transition">Log out</button>
@@ -58,42 +73,52 @@
   </div>
 
   <script>
+    /* ========= ENV ========= */
     const SUPABASE_URL  = "${SUPABASE_URL}";
     const SUPABASE_ANON = "${SUPABASE_ANON_KEY}";
 
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth:{flowType:'pkce'} });
-    const loginUI=document.getElementById('login');
-    const panelUI=document.getElementById('panel');
-    const statusEl=document.getElementById('status');
+    const loginUI = document.getElementById('login');
+    const panelUI = document.getElementById('panel');
+    const statusEl = document.getElementById('status');
 
     async function refresh(){
-      const {data:{session}} = await sb.auth.getSession();
-      if(session){loginUI.classList.add('hidden');panelUI.classList.remove('hidden');loadForm();}
-      else {panelUI.classList.add('hidden');loginUI.classList.remove('hidden');}
+      const { data:{ session } } = await sb.auth.getSession();
+      if(session){ loginUI.classList.add('hidden'); panelUI.classList.remove('hidden'); loadForm(); }
+      else { panelUI.classList.add('hidden'); loginUI.classList.remove('hidden'); }
     }
 
     document.getElementById('btn-login').addEventListener('click',()=>{
-      sb.auth.signInWithOAuth({provider:'vercel',options:{redirectTo:location.href}});
+      sb.auth.signInWithOAuth({ provider:'vercel', options:{ redirectTo:location.href } });
     });
-    document.getElementById('signout').addEventListener('click',async()=>{await sb.auth.signOut();refresh();});
+    document.getElementById('signout').addEventListener('click', async ()=>{ await sb.auth.signOut(); refresh(); });
 
+    /* ===== Load & Save ===== */
     async function loadForm(){
-      statusEl.textContent='Loading…';
-      const res=await fetch('/api/config');
-      if(!res.ok){statusEl.textContent='Error loading';return;}
-      const d=await res.json();
-      panelUI.bg.value=d.bg||'cosmic';
-      panelUI.hue.value=d.hue||'#4ade80';
-      panelUI.osc.value=d.osc||'sine';
-      panelUI.bpm.value=d.bpm||40;
+      statusEl.textContent = 'Loading…';
+      const res = await fetch('/api/config');
+      if(!res.ok){ statusEl.textContent='Error loading'; return; }
+      const d = await res.json();
+      panelUI.bg.value           = d.bg            ?? 'cosmic';
+      panelUI.hue.value          = d.hue           ?? '#9333ff';
+      panelUI.osc.value          = d.osc           ?? 'sine';
+      panelUI.bpm.value          = d.bpm           ?? 40;
+      panelUI.star_density.value = d.star_density ?? 0.0011;
       statusEl.textContent='';
     }
 
-    panelUI.addEventListener('submit',async e=>{
-      e.preventDefault();statusEl.textContent='Saving…';
-      const payload={bg:panelUI.bg.value,hue:panelUI.hue.value,osc:panelUI.osc.value,bpm:Number(panelUI.bpm.value)};
-      const res=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-      statusEl.textContent=res.ok?'Saved ✓':'Save failed';
+    panelUI.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      statusEl.textContent='Saving…';
+      const payload = {
+        bg: panelUI.bg.value,
+        hue: panelUI.hue.value,
+        osc: panelUI.osc.value,
+        bpm: Number(panelUI.bpm.value),
+        star_density: Number(panelUI.star_density.value)
+      };
+      const res = await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+      statusEl.textContent = res.ok ? 'Saved ✓' : 'Save failed';
     });
 
     sb.auth.onAuthStateChange(()=>refresh());
