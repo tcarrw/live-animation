@@ -4,25 +4,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>iMoon • Admin</title>
-  <!-- Tailwind (CDN, no build‑step required) -->
+  <!-- Tailwind (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Supabase JS v2 (ESM-friendly but works standalone in <script>) -->
+  <!-- Supabase JS (only for auth) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.43.1/dist/umd/supabase.min.js"></script>
   <style>
-    /* tiny dark mode tweak */
     html { color-scheme: dark light; }
   </style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-center bg-neutral-900 text-neutral-100 p-4">
   <div id="app" class="w-full max-w-lg">
-    <!-- login UI -->
+    <!-- LOGIN -->
     <div id="login" class="text-center space-y-6 hidden">
       <h1 class="text-2xl font-semibold tracking-wide">iMoon Admin</h1>
-      <p class="opacity-80">Sign in with your Vercel account to manage live‑stream settings.</p>
+      <p class="opacity-80">Sign in with your Vercel account to manage stream settings.</p>
       <button id="btn-login" class="px-6 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 transition">Login with Vercel</button>
     </div>
 
-    <!-- config form -->
+    <!-- PANEL -->
     <form id="panel" class="space-y-6 hidden">
       <h2 class="text-xl font-medium">Stream Configuration</h2>
 
@@ -57,20 +56,19 @@
 
       <div class="flex gap-4">
         <button type="submit" class="flex-1 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 transition">Save</button>
-        <button id="signout" type="button" class="flex-1 py-2 rounded-xl bg-neutral-700 hover:bg-neutral-600 transition">Log out</button>
+        <button id="signout" type="button" class="flex-1 py-2 rounded-xl bg-neutral-700 hover:bg-neutral-600 transition">Log out</button>
       </div>
       <p id="status" class="text-sm opacity-70"></p>
     </form>
   </div>
 
   <script>
-    /* =========  ENV CONFIG  ========= */
-    const SUPABASE_URL  = "${SUPABASE_URL}";      // set via replace‑time or env‑injection
-    const SUPABASE_KEY  = "${SUPABASE_ANON_KEY}"; // don't commit real keys
-    const TABLE         = "stream_cfg";            // single‑row settings table
+    /* ===================  ENV  =================== */
+    const SUPABASE_URL  = "${SUPABASE_URL}";      // still needed for auth only
+    const SUPABASE_ANON = "${SUPABASE_ANON_KEY}"; // safe public key
 
-    /* =========  INIT  ========= */
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    /* =================  INIT  ==================== */
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
       auth: { flowType: 'pkce' }
     });
     const loginUI  = document.getElementById('login');
@@ -89,7 +87,7 @@
       }
     }
 
-    /* =========  LOGIN  ========= */
+    /* =================  LOGIN  =================== */
     document.getElementById('btn-login').addEventListener('click', () => {
       sb.auth.signInWithOAuth({ provider: 'vercel', options: { redirectTo: location.href } });
     });
@@ -99,37 +97,42 @@
       refresh();
     });
 
-    /* =========  LOAD & SAVE  ========= */
+    /* ==========  LOAD & SAVE via /api/config  =========== */
     async function loadForm() {
-      const { data, error } = await sb.from(TABLE).select('*').limit(1).single();
-      if (error && error.code !== 'PGRST116') {
-        statusEl.textContent = 'Error loading config: ' + error.message;
+      statusEl.textContent = 'Loading…';
+      const res = await fetch('/api/config');
+      if (!res.ok) {
+        statusEl.textContent = 'Error loading config';
         return;
       }
+      const data = await res.json();
       if (data) {
         panelUI.bg.value  = data.bg  || 'stars';
         panelUI.hue.value = data.hue || '#4ade80';
         panelUI.osc.value = data.osc || 'sine';
         panelUI.bpm.value = data.bpm || 40;
       }
+      statusEl.textContent = '';
     }
 
     panelUI.addEventListener('submit', async (e) => {
       e.preventDefault();
       statusEl.textContent = 'Saving…';
       const payload = {
-        id: 1, // single‑row table; use PK id = 1
-        bg:  panelUI.bg.value,
+        bg: panelUI.bg.value,
         hue: panelUI.hue.value,
         osc: panelUI.osc.value,
         bpm: Number(panelUI.bpm.value)
       };
-      const { error } = await sb.from(TABLE).upsert(payload, { onConflict: 'id' });
-      statusEl.textContent = error ? 'Save failed: ' + error.message : 'Saved ✓';
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      statusEl.textContent = res.ok ? 'Saved ✓' : 'Save failed';
     });
 
-    /* =========  PKCE HANDOFF  ========= */
-    // Handle OAuth redirect (Supabase v2 pkce flow)
+    /* =================  AUTH HANDOFF  ================= */
     sb.auth.onAuthStateChange((_e, _s) => refresh());
     refresh();
   </script>
