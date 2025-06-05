@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>iMoon Stream • Landscape</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.43.1/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.js"></script>
+  <style>
+    html,body,#root{width:100%;height:100%;margin:0}
+    canvas{display:block}
+    #hud{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);font-family:monospace;font-size:14px}
+  </style>
+</head>
+<body class="bg-black overflow-hidden">
+  <canvas id="c"></canvas>
+  <div id="hud" class="text-lime-400/80"></div>
+
+  <script>
+    /* ====== CONFIG ===== */
+    const SUPA_URL  = "${SUPABASE_URL}";
+    const SUPA_ANON = "${SUPABASE_ANON_KEY}";
+    const TABLE     = "stream_cfg";
+
+    const cfgParam = new URLSearchParams(location.search).get('cfg');
+    let cfg = cfgParam ? JSON.parse(cfgParam) : null;
+
+    async function fetchCfg(){
+      if(cfg) return cfg;
+      const sb = supabase.createClient(SUPA_URL, SUPA_ANON);
+      const { data } = await sb.from(TABLE).select('*').limit(1).single();
+      cfg = data||{bg:'stars',hue:'#4ade80',osc:'sine',bpm:40};
+      return cfg;
+    }
+
+    /* ====== DRAW STARS BACKGROUND ===== */
+    const canvas = document.getElementById('c');
+    const ctx    = canvas.getContext('2d');
+    function resize(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight; }
+    window.addEventListener('resize',resize); resize();
+
+    const stars = Array.from({length:400}).map(()=>({
+      x: Math.random(),
+      y: Math.random(),
+      r: Math.random()*2+0.3,
+      s: Math.random()*0.5+0.2
+    }));
+
+    let start; function animate(t){
+      if(!start) start=t; const dt=(t-start)/1000;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+      stars.forEach(st=>{
+        const tw=(Math.sin(dt*0.5+st.s*10)+1)/2;
+        ctx.beginPath();
+        ctx.arc(st.x*canvas.width,st.y*canvas.height,st.r*tw,0,Math.PI*2);
+        ctx.fillStyle='#fff';
+        ctx.fill();
+      });
+      requestAnimationFrame(animate);
+    }
+
+    /* ====== HUD: next full moon countdown ===== */
+    function nextFullMoon(now=new Date()){
+      const synodic=29.53059*86400*1000;
+      const phase=SunCalc.getMoonIllumination(now).phase; // 0 new, .5 full
+      const diff=(phase>0.5?1.5-phase:0.5-phase)*synodic;
+      return new Date(now.getTime()+diff);
+    }
+
+    const hud=document.getElementById('hud');
+    function hudLoop(){
+      const now=new Date();
+      const full=nextFullMoon(now);
+      const s=Math.floor((full-now)/1000);
+      const d=Math.floor(s/86400); const h=Math.floor(s%86400/3600); const m=Math.floor(s%3600/60);
+      hud.textContent=`Next full moon in ${d}d ${h}h ${m}m`;
+      requestAnimationFrame(hudLoop);
+    }
+
+    /* ====== MAIN ===== */
+    (async()=>{
+      await fetchCfg();
+      requestAnimationFrame(animate);
+      hudLoop();
+    })();
+  </script>
+</body>
+</html>
