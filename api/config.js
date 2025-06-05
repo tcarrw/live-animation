@@ -1,47 +1,46 @@
-// api/config.js — Vercel Edge Function
-// Handles GET / POST for stream settings so the browser never sees private keys
-// Requires env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE
+// api/config.js — Vercel *Node* Function (not Edge)
+// Securely reads & writes the single-row `stream_cfg` table in Supabase.
+// Requires env vars:
+//   SUPABASE_URL           – https://xxxx.supabase.co
+//   SUPABASE_SERVICE_ROLE  – service‑role secret key (**keep server‑side only**)
 
-import { createClient } from "@supabase/supabase-js";
+const { createClient } = require('@supabase/supabase-js');
 
-export const config = { runtime: "edge" };
-
+// Initialise client once per invocation
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE  // service‑role key (keep **only** on server)
+  process.env.SUPABASE_SERVICE_ROLE
 );
 
-export default async function handler(req) {
-  const { method } = req;
+module.exports = async (req, res) => {
+  const method = req.method;
 
-  if (method === "GET") {
+  // ===== GET  /api/config  =====
+  if (method === 'GET') {
     const { data, error } = await supabase
-      .from("stream_cfg")
-      .select("*")
+      .from('stream_cfg')
+      .select('*')
       .limit(1)
       .single();
 
-    if (error) return json({ error: error.message }, 500);
-    return json(data, 200);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json(data || {});
   }
 
-  if (method === "POST") {
-    const body = await req.json();
-    const row  = { id: 1, ...body };           // single‑row table
+  // ===== POST  /api/config  =====
+  if (method === 'POST') {
+    const body = req.body || {};
+    const row  = { id: 1, ...body }; // single-row table
+
     const { error } = await supabase
-      .from("stream_cfg")
-      .upsert(row, { onConflict: "id" });
+      .from('stream_cfg')
+      .upsert(row, { onConflict: 'id' });
 
-    if (error) return json({ error: error.message }, 500);
-    return json({ success: true }, 200);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
   }
 
-  return new Response(null, { status: 405, headers: { Allow: "GET, POST" } });
-}
-
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
+  // ===== Unsupported method =====
+  res.setHeader('Allow', ['GET', 'POST']);
+  return res.status(405).end(`Method ${method} Not Allowed`);
+};
