@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>iMoon • Admin</title>
+  <!-- Tailwind (CDN, no build‑step required) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS v2 (ESM-friendly but works standalone in <script>) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.43.1/dist/umd/supabase.min.js"></script>
+  <style>
+    /* tiny dark mode tweak */
+    html { color-scheme: dark light; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center bg-neutral-900 text-neutral-100 p-4">
+  <div id="app" class="w-full max-w-lg">
+    <!-- login UI -->
+    <div id="login" class="text-center space-y-6 hidden">
+      <h1 class="text-2xl font-semibold tracking-wide">iMoon Admin</h1>
+      <p class="opacity-80">Sign in with your Vercel account to manage live‑stream settings.</p>
+      <button id="btn-login" class="px-6 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 transition">Login with Vercel</button>
+    </div>
+
+    <!-- config form -->
+    <form id="panel" class="space-y-6 hidden">
+      <h2 class="text-xl font-medium">Stream Configuration</h2>
+
+      <label class="block">
+        <span class="block mb-1">Background preset</span>
+        <select name="bg" class="w-full rounded-md bg-neutral-800 p-2">
+          <option value="stars">Stars</option>
+          <option value="waves">Waves</option>
+          <option value="aurora">Aurora</option>
+        </select>
+      </label>
+
+      <label class="block">
+        <span class="block mb-1">Accent Hue</span>
+        <input type="color" name="hue" class="w-full h-10 rounded-md bg-neutral-800" value="#4ade80" />
+      </label>
+
+      <label class="block">
+        <span class="block mb-1">Oscillator Type</span>
+        <select name="osc" class="w-full rounded-md bg-neutral-800 p-2">
+          <option>sine</option>
+          <option>triangle</option>
+          <option>square</option>
+          <option>sawtooth</option>
+        </select>
+      </label>
+
+      <label class="block">
+        <span class="block mb-1">BPM (breathing cadence)</span>
+        <input type="number" name="bpm" min="20" max="120" step="1" value="40" class="w-full rounded-md bg-neutral-800 p-2" />
+      </label>
+
+      <div class="flex gap-4">
+        <button type="submit" class="flex-1 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 transition">Save</button>
+        <button id="signout" type="button" class="flex-1 py-2 rounded-xl bg-neutral-700 hover:bg-neutral-600 transition">Log out</button>
+      </div>
+      <p id="status" class="text-sm opacity-70"></p>
+    </form>
+  </div>
+
+  <script>
+    /* =========  ENV CONFIG  ========= */
+    const SUPABASE_URL  = "${SUPABASE_URL}";      // set via replace‑time or env‑injection
+    const SUPABASE_KEY  = "${SUPABASE_ANON_KEY}"; // don't commit real keys
+    const TABLE         = "stream_cfg";            // single‑row settings table
+
+    /* =========  INIT  ========= */
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { flowType: 'pkce' }
+    });
+    const loginUI  = document.getElementById('login');
+    const panelUI  = document.getElementById('panel');
+    const statusEl = document.getElementById('status');
+
+    async function refresh() {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) {
+        loginUI.classList.add('hidden');
+        panelUI.classList.remove('hidden');
+        loadForm();
+      } else {
+        panelUI.classList.add('hidden');
+        loginUI.classList.remove('hidden');
+      }
+    }
+
+    /* =========  LOGIN  ========= */
+    document.getElementById('btn-login').addEventListener('click', () => {
+      sb.auth.signInWithOAuth({ provider: 'vercel', options: { redirectTo: location.href } });
+    });
+
+    document.getElementById('signout').addEventListener('click', async () => {
+      await sb.auth.signOut();
+      refresh();
+    });
+
+    /* =========  LOAD & SAVE  ========= */
+    async function loadForm() {
+      const { data, error } = await sb.from(TABLE).select('*').limit(1).single();
+      if (error && error.code !== 'PGRST116') {
+        statusEl.textContent = 'Error loading config: ' + error.message;
+        return;
+      }
+      if (data) {
+        panelUI.bg.value  = data.bg  || 'stars';
+        panelUI.hue.value = data.hue || '#4ade80';
+        panelUI.osc.value = data.osc || 'sine';
+        panelUI.bpm.value = data.bpm || 40;
+      }
+    }
+
+    panelUI.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusEl.textContent = 'Saving…';
+      const payload = {
+        id: 1, // single‑row table; use PK id = 1
+        bg:  panelUI.bg.value,
+        hue: panelUI.hue.value,
+        osc: panelUI.osc.value,
+        bpm: Number(panelUI.bpm.value)
+      };
+      const { error } = await sb.from(TABLE).upsert(payload, { onConflict: 'id' });
+      statusEl.textContent = error ? 'Save failed: ' + error.message : 'Saved ✓';
+    });
+
+    /* =========  PKCE HANDOFF  ========= */
+    // Handle OAuth redirect (Supabase v2 pkce flow)
+    sb.auth.onAuthStateChange((_e, _s) => refresh());
+    refresh();
+  </script>
+</body>
+</html>
