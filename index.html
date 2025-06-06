@@ -3,81 +3,191 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>iMoon • Cosmic Meditation</title>
-  <!-- Google Font used in original boop site -->
+  <title>iMoon • PLNT earth</title>
+
+  <!-- Google font -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;700&display=swap" rel="stylesheet">
+
+  <!-- Moon-phase helper -->
   <script src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.js"></script>
+
   <style>
-    :root{ --accent:#9333ff; }
-    html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden;font-family:'Outfit',sans-serif}
-    canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-    /* Orb */
-    #orb{position:absolute;left:50%;top:45%;width:260px;height:260px;transform:translate(-50%,-50%);
-         border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0%,#d7d7ff 38%,#5a5aff 100%);
-         box-shadow:0 0 80px #5a5affa0,inset 0 0 25px #ffffff80;animation:float 14s ease-in-out infinite;}
-    @keyframes float{0%{transform:translate(-50%,-50%) translateY(-10px);}50%{transform:translate(-50%,-50%) translateY(10px);}100%{transform:translate(-50%,-50%) translateY(-10px);}}
-    /* Ring text */
-    #ring{position:absolute;left:50%;top:45%;transform-style:preserve-3d;animation:spin 12s linear infinite;}
-    @keyframes spin{from{transform:translate(-50%,-50%) rotate(0deg);}to{transform:translate(-50%,-50%) rotate(360deg);}}
-    .char{position:absolute;left:0;top:0;color:#fff;font-size:24px;font-weight:700;letter-spacing:4px;transform-origin:130px 0;}
+    :root      { --accent:#9333ff }
+    *          { box-sizing:border-box;margin:0;padding:0 }
+    html,body  { width:100%;height:100%;overflow:hidden;background:#000;font-family:'Outfit',sans-serif }
+
+    /* Star-field canvas fills screen */
+    canvas     { position:absolute;inset:0;width:100%;height:100%;display:block }
+
+    /* ───────────  LOGO  ─────────── */
+    #logo      { position:absolute;top:16px;left:20px;color:#fff;font-size:22px;font-weight:700;
+                 letter-spacing:1px;z-index:40;animation:bob 4s ease-in-out infinite }
+    #logo span { font-weight:300 }
+    @keyframes bob { 0%,100%{transform:translateY(-4px)}50%{transform:translateY(4px)} }
+
+    /* Tiny orbiting moon around logo */
+    #logo-moon { position:absolute;width:20px;height:20px;border-radius:50%;background:#ffeb6e;
+                 top:50%;left:50%;transform:translate(-50%,-50%);animation:logoOrbit 6s linear infinite;
+                 box-shadow:0 0 8px #ffeb6e80 }
+    @keyframes logoOrbit { from{transform:translate(-50%,-50%) rotate(0deg) translateX(32px)}
+                           to  {transform:translate(-50%,-50%) rotate(360deg) translateX(32px)} }
+
+    /* ───────────  BIG MOON & RINGS  ─────────── */
+    #moon-wrap { --range:300px;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+                 animation:path 60s linear infinite;z-index:15 }
+    @keyframes path {
+      0%   {transform:translate(-50%,-50%) translateX(calc(-1*var(--range))) rotate(0deg)}
+      50%  {transform:translate(-50%,-50%) translateX(var(--range)) rotate(180deg)}
+      100% {transform:translate(-50%,-50%) translateX(calc(-1*var(--range))) rotate(360deg)}
+    }
+    /* faint rings */
+    #rings { position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none }
+    .ring  { position:absolute;border:4px solid #ffffff10;border-radius:50%;filter:blur(2px) }
+    .r1    { width:400px;height:400px;margin:-200px 0 0 -200px }
+    .r2    { width:340px;height:340px;margin:-170px 0 0 -170px }
+    .r3    { width:290px;height:290px;margin:-145px 0 0 -145px }
+
+    /* moon layers */
+    #moon       { position:relative;width:260px;height:260px;border-radius:50%;overflow:hidden }
+    #disk       { position:absolute;inset:0;border-radius:50%;background:#ffeb6e }
+    #semi       { position:absolute;inset:0;border-radius:50%;background:#000 }          /* dark half */
+    #term       { position:absolute;top:0;left:50%;height:100%;transform:translateX(-50%);
+                  background:#ffeb6e;border-radius:50%;mix-blend-mode:hard-light }        /* bright ellipse */
+    .crater     { position:absolute;border-radius:50%;background:#d6c75780;mix-blend-mode:overlay }
+    .c1         { width:46px;height:46px;left:45px;top:70px }
+    .c2         { width:34px;height:34px;right:40px;top:108px }
+    .c3         { width:24px;height:24px;left:105px;top:150px }
+
+    /* satellite diamond */
+    #sat        { position:absolute;width:12px;height:12px;border:2px solid #fff;transform:rotate(45deg);
+                  animation:satOrbit 8s linear infinite;transform-origin:130px 130px }
+    @keyframes satOrbit { from{transform:rotate(0deg)   translateX(165px) rotate(45deg)}
+                          to  {transform:rotate(360deg) translateX(165px) rotate(45deg)} }
+
+    /* UFO + comet */
+    #ufo        { position:absolute;width:24px;height:10px;background:#fff;border-radius:50%/100%;
+                  box-shadow:0 0 12px #fff;animation:ufoFly 14s linear infinite;z-index:12 }
+    @keyframes ufoFly { 0% {left:-10%;top:35%} 50%{left:110%;top:42%} 100%{left:-10%;top:35%} }
+    #comet      { position:absolute;width:4px;height:4px;border-radius:50%;background:#fff;
+                  box-shadow:-10px 0 8px 4px #ffffff80;animation:comet 18s linear infinite }
+    @keyframes comet { 0% {left:120%;top:15%} 100%{left:-20%;top:85%} }
+
     /* HUD */
-    #hud{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);font-size:14px;letter-spacing:0.5px;color:var(--accent);opacity:.8}
+    #hud   { position:absolute;bottom:20px;right:20px;color:var(--accent);font-size:14px;line-height:1.4;text-align:right;z-index:25 }
+    #time  { font-size:24px;font-weight:700;color:#fff }
   </style>
 </head>
 <body>
-  <canvas id="c"></canvas>
-  <div id="orb"></div>
-  <div id="ring"></div>
-  <div id="hud"></div>
+  <!-- Bobbing logo -->
+  <div id="logo">PLNT<span>earth</span><div id="logo-moon"></div></div>
+
+  <!-- Starfield -->
+  <canvas id="stars"></canvas>
+
+  <!-- Big moon + rings -->
+  <div id="moon-wrap">
+    <div id="rings"><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div></div>
+    <div id="moon">
+      <div id="disk"></div>
+      <div id="semi"></div>
+      <div id="term"></div>
+      <div class="crater c1"></div><div class="crater c2"></div><div class="crater c3"></div>
+      <div id="sat"></div>
+    </div>
+  </div>
+
+  <!-- UFO + comet -->
+  <div id="ufo"></div><div id="comet"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="next"></div>
+    <div id="illum"></div>
+    <div id="time"></div>
+  </div>
 
 <script>
-let starDensity=0.0011, accentHue='#9333ff';
-fetch('/api/config').then(r=>r.ok?r.json():{}).then(cfg=>{
-  if(cfg.star_density) starDensity=Number(cfg.star_density);
-  if(cfg.hue) accentHue=cfg.hue;
-  document.documentElement.style.setProperty('--accent',accentHue);
-  init();
-}).catch(init);
+/* ---------- CONFIG FROM ADMIN ---------- */
+let starDensity = 0.0011;
+let accentHue   = '#9333ff';
+fetch('/api/config')
+  .then(r => r.ok ? r.json() : {})
+  .then(cfg => {
+    if (cfg.star_density) starDensity = +cfg.star_density;
+    if (cfg.hue)          accentHue   = cfg.hue;
+    document.documentElement.style.setProperty('--accent', accentHue);
+    startScene();
+  })
+  .catch(startScene);
 
-function init(){
-  // Ring text build
-  const ring=document.getElementById('ring');
-  const text='PLNT';
-  ring.innerHTML='';
-  for(let i=0;i<text.length;i++){
-    const span=document.createElement('span');
-    span.textContent=text[i];
-    span.className='char';
-    span.style.transform=`rotate(${i*90}deg)`; // 360/4
-    ring.appendChild(span);
+function startScene() {
+  /* ---------- STARFIELD ---------- */
+  const cvs = document.getElementById('stars');
+  const ctx = cvs.getContext('2d');
+  let stars = [];
+  function resize() {
+    cvs.width  = innerWidth;
+    cvs.height = innerHeight;
+    stars = Array.from({ length: Math.floor(cvs.width * cvs.height * starDensity) },
+      () => ({ x: Math.random() * cvs.width, y: Math.random() * cvs.height, tw: Math.random() * 360 })
+    );
   }
-
-  // Starfield
-  const canvas=document.getElementById('c');
-  const ctx=canvas.getContext('2d');
-  let stars=[];
-  const speedBase=4e-3;
-  function resize(){canvas.width=innerWidth;canvas.height=innerHeight;genStars();}
-  addEventListener('resize',resize);
-  function genStars(){
-    const n=Math.floor(canvas.width*canvas.height*starDensity);
-    stars=Array.from({length:n}).map(()=>{const a=Math.random()*6.28,s=(Math.random()*.4+.8)*speedBase;
-      return{x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*1.1+.2,tw:Math.random()*360,vx:Math.cos(a)*s,vy:Math.sin(a)*s};});
+  addEventListener('resize', resize);
+  resize();
+  function drawStars(t) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+    for (const s of stars) {
+      ctx.fillStyle = `rgba(255,255,255,${0.5 + 0.5 * Math.sin(t * 0.002 + s.tw)})`;
+      ctx.fillRect(s.x, s.y, 1, 1);
+    }
+    requestAnimationFrame(drawStars);
   }
-  let last;
-  function draw(t){if(!last)last=t;const dt=t-last;last=t;ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
-    for(const s of stars){s.x+=s.vx*dt;s.y+=s.vy*dt;if(s.x<0)s.x+=canvas.width;if(s.x>canvas.width)s.x-=canvas.width;if(s.y<0)s.y+=canvas.height;if(s.y>canvas.height)s.y-=canvas.height;
-      ctx.fillStyle=`rgba(255,255,255,${0.5+0.5*Math.sin(t*.002+s.tw)})`;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,6.28);ctx.fill();}
-    requestAnimationFrame(draw);}
+  requestAnimationFrame(drawStars);
 
-  // HUD
-  const hud=document.getElementById('hud');
-  function nextFullMoon(n=new Date()){const syn=29.53059*86400*1e3;const p=SunCalc.getMoonIllumination(n).phase;return new Date(n.getTime()+((p>.5?1.5-p:.5-p)*syn));}
-  function hudLoop(){const n=new Date(),f=nextFullMoon(n),s=Math.floor((f-n)/1e3);hud.textContent=`Full moon in ${Math.floor(s/86400)}d ${Math.floor(s%86400/3600)}h ${Math.floor(s%3600/60)}m`;requestAnimationFrame(hudLoop);}
+  /* ---------- MOON SHADOW ---------- */
+  const semi  = document.getElementById('semi');
+  const term  = document.getElementById('term');
+  const D     = 260;          // moon diameter
+  function updateShadow() {
+    const phase = SunCalc.getMoonIllumination(new Date()).phase; // 0 … 1
+    const waxing = phase < 0.5;
 
-  resize();requestAnimationFrame(draw);hudLoop();
+    /* dark semi-circle side */
+    semi.style.clipPath = waxing
+      ? 'inset(0 50% 0 0)'
+      : 'inset(0 0 0 50%)';
+
+    /* bright ellipse width: 0 → D at quarter → 2D at full */
+    const pct   = waxing ? phase : 1 - phase;   // 0 … 0.5
+    const scale = pct * 2;                      // 0 → 1 → 2
+    const w     = D * scale;
+    term.style.width      = w + 'px';
+    term.style.marginLeft = -(w / 2) + 'px';
+  }
+  setTimeout(updateShadow, 500);      // first run within ~1 s
+  setInterval(updateShadow, 5_000);   // every 5 s
+
+  /* ---------- HUD ---------- */
+  const nextE  = document.getElementById('next');
+  const illumE = document.getElementById('illum');
+  const timeE  = document.getElementById('time');
+  function nextFullMoon(d) {
+    const syn = 29.53059 * 864e5;
+    const ph  = SunCalc.getMoonIllumination(d).phase;
+    return new Date(d.getTime() + ((ph > 0.5 ? 1.5 - ph : 0.5 - ph) * syn));
+  }
+  function hudTick() {
+    const now   = new Date();
+    const moon  = SunCalc.getMoonIllumination(now);
+    nextE.textContent  = `Next Full Moon: ${nextFullMoon(now).toLocaleDateString(undefined, { month:'short', day:'numeric' })}`;
+    illumE.textContent = `Illumination: ${(moon.fraction * 100).toFixed(1)}%`;
+    timeE.textContent  = now.toLocaleTimeString();
+  }
+  hudTick();
+  setInterval(hudTick, 1_000);
 }
 </script>
 </body>
